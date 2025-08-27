@@ -26,7 +26,7 @@
   "shell": {
     "init_hook": [
       "unset DEVELOPER_DIR",
-      "eval \"$(fnm env --use-on-cd --shell zsh)\"",
+      "eval \"$(fnm env --use-on-cd)\"",
       "gum spin --show-output --spinner dot --title \"Initiating TRIMM Platform modules...\" -- fnm use 24 --install-if-missing",
       "gum style --foreground \"#ffffff\" --background \"#0d709a\" --border double --border-background \"#0d709a\" --margin \"1\" --padding \"1 2\" --width \"100\" --align center \"$(gum style --bold 'TRIMM Platform')\" 'Local development' \"$(gum style --bold --foreground \"#ff005f\"--bold \"$(cat project.yaml | yq '.title') project\")\" \"Run \\\"menu\\\" to continue...\"",
       "menu () { chmod +x {{ .Virtenv }}/init.sh; {{ .Virtenv }}/init.sh; }"
