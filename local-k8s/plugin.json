@@ -1,0 +1,41 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.16.0/.schema/devbox-plugin.schema.json",
+  "name": "local-k8s",
+  "version": "0.1.0",
+  "description": "Local development helper for Kubernetes based development at TRIMM",
+  "packages": [
+    "kubectl@1.33.3",
+    "kubectl-cnpg@1.26.1",
+    "k3d@5.8.3",
+    "devspace@6.3.16",
+    "gum@0.16.2",
+    "fnm@1.38.1",
+    "yq-go@4.47.1",
+    "openbao@2.3.2"
+  ],
+  "create_files": {
+    "{{ .Virtenv }}/init.sh": "scripts/init.sh"
+  },
+  "env": {
+    "GITLAB_CLIENT_ID":            "642eb160ffedb351ead89f16a665ebd8c827328c2f67d40841184626d992cef9",
+    "GITLAB_HOST":                 "gitlab.trimm.nl",
+    "GUM_INPUT_CURSOR_FOREGROUND": "#0d709a",
+    "VAULT_ADDR":                  "https://vault.platform.trimm.net",
+    "POWERLEVEL9K_INSTANT_PROMPT": "off"
+  },
+  "shell": {
+    "init_hook": [
+      "unset DEVELOPER_DIR",
+      "eval \"$(fnm env --use-on-cd --shell zsh)\"",
+      "gum spin --show-output --spinner dot --title \"Initiating TRIMM Platform modules...\" -- fnm use 24 --install-if-missing",
+      "gum style --foreground \"#ffffff\" --background \"#0d709a\" --border double --border-background \"#0d709a\" --margin \"1\" --padding \"1 2\" --width \"100\" --align center \"$(gum style --bold 'TRIMM Platform')\" 'Local development' \"$(gum style --bold --foreground \"#ff005f\"--bold \"$(cat project.yaml | yq '.title') project\")\" \"Run \\\"menu\\\" to continue...\"",
+      "menu () { chmod +x {{ .Virtenv }}/init.sh; {{ .Virtenv }}/init.sh; }"
+    ],
+    "scripts": {
+      "init": [
+        "chmod +x {{ .Virtenv }}/init.sh",
+        "{{ .Virtenv }}/init.sh"
+      ]
+    }
+  }
+}
