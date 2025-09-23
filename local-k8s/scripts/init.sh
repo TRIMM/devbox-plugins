@@ -2,7 +2,7 @@
 
 set -e
 
-CURRENT_VERSION="1.5.1"
+CURRENT_VERSION="1.5.2"
 
 if [ ! -f project.yaml ]; then
     gum style \
@@ -381,19 +381,60 @@ setup_services () {
         # Get the repository for the current service name
         repo=$(echo "$config" | yq '.services[] | select(.name == "'"${service_name}"'") | .repo')
 
-        service_directory="services/$service_name"
+        project_directory="services/$service_name"
 
         # Check if directory already exists
-        if [ -d "$service_directory" ]; then
-            echo "Directory $service_directory already exists. Reverting to git pull."
-            gum spin -s line --title "Pulling $service_name..." -- git -C "./$service_directory" pull origin
+        if [ -d "$project_directory" ]; then
+            echo "Directory $project_directory already exists. Reverting to git pull."
+            gum spin -s line --title "Pulling $service_name..." -- git -C "./$project_directory" pull origin
             sleep 1;
         else
-            gum spin -s line --title "Cloning $service_name..." -- git clone "https://oauth2:$token@gitlab.trimm.nl/$repo.git" "$service_directory"
-            git -C "./$service_directory" remote set-url origin "git@gitlab.trimm.nl:$repo.git"
+            gum spin -s line --title "Cloning $service_name..." -- git clone "https://oauth2:$token@gitlab.trimm.nl/$repo.git" "$project_directory"
+            git -C "./$project_directory" remote set-url origin "git@gitlab.trimm.nl:$repo.git"
         fi
       done <<< "$SERVICES"
     fi
+  fi
+
+  echo "Done"; sleep 1;
+}
+
+setup_manifests () {
+  if [ "$(echo "$config" | yq "has(\"manifests\")")" = "true" ]; then
+    ANSWER=$(gum choose --header "Should clone the manifests repositories?" "No" "Yes")
+    echo $ANSWER
+    if [ "$ANSWER" == "Yes" ]; then
+      token=$(yq -r .access_token $HOME/.trimm-platform/tokens.json)
+      if [ -n "$(echo "$config" | yq ".manifests.project")" ]; then
+        repo=technology/platform-projects/$(echo "$config" | yq ".manifests.project")
+        project_directory="project-manifests"
+        # Check if directory already exists
+        if [ -d "$project_directory" ]; then
+            echo "Directory $project_directory already exists. Reverting to git pull."
+            gum spin -s line --title "Pulling $project_directory..." -- git -C "./$project_directory" pull origin
+            sleep 1;
+        else
+            gum spin -s line --title "Cloning $project_directory..." -- git clone "https://oauth2:$token@gitlab.trimm.nl/$repo.git" "$project_directory"
+            git -C "./$project_directory" remote set-url origin "git@gitlab.trimm.nl:$repo.git"
+        fi
+      fi
+
+      if [ -n "$(echo "$config" | yq ".manifests.platform")" ]; then
+        repo=$(echo "$config" | yq ".manifests.platform")
+        project_directory="platform-manifests"
+        # Check if directory already exists
+        if [ -d "$project_directory" ]; then
+            echo "Directory $project_directory already exists. Reverting to git pull."
+            gum spin -s line --title "Pulling $project_directory..." -- git -C "./$project_directory" pull origin
+            sleep 1;
+        else
+            gum spin -s line --title "Cloning $project_directory..." -- git clone "https://oauth2:$token@gitlab.trimm.nl/$repo.git" "$project_directory"
+            git -C "./$project_directory" remote set-url origin "git@gitlab.trimm.nl:$repo.git"
+        fi
+      fi
+    fi
+  else
+    echo "No manifests found in project.yaml, skipping project/platform manifests repositories"
   fi
 
   echo "Done"; sleep 1;
@@ -532,6 +573,10 @@ setup () {
   clear; header
 
   setup_services
+
+  clear; header
+
+  setup_manifests
 
   clear; header
 
