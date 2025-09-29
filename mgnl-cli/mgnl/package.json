@@ -1,0 +1,20 @@
+{
+	"name": "tp-mgnl-cli",
+	"version": "0.1.0",
+	"description": "This project uses Jetify's Devbox to manage its dependencies, install it with",
+	"main": "mgnl.config.js",
+	"type": "module",
+	"directories": {},
+	"dependencies": {
+		"@magnolia/cli": "^5.1.0",
+		"@magnolia/cli-jumpstart-plugin": "^1.1.4",
+		"@magnolia/cli-start-plugin": "^1.0.3"
+	},
+	"scripts": {
+		"test": "echo \"Error: no test specified\" && exit 1",
+		"mgnl": "node node_modules/@magnolia/cli"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC"
+}

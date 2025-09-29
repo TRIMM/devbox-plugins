@@ -1,0 +1,37 @@
+{
+  "projectTemplates": [
+    {
+      "name": "platform",
+      "description": "Magnolia with headless starter projects",
+      "children": [
+        {
+          "name": "nuxt",
+          "children": [
+            {
+              "name": "dx-core",
+              "bundles": [
+                {
+                  "url": "https://nexus.magnolia-cms.com/service/rest/v1/search/assets?sort=version&repository=public&maven.groupId=info.magnolia.tomcat.barebone&maven.artifactId=magnolia-tomcat-barebone&maven.extension=zip",
+                  "dest": "{{ .DevboxProjectDir }}/.magnolia",
+                  "postCommand": ["extract"]
+                }
+              ],
+              "plugins": [
+                {
+                  "plugin": "@magnolia/cli-start-plugin",
+                  "pluginArgs": {
+                    "tomcatPath": "{{ .DevboxProjectDir }}/.magnolia/apache-tomcat"
+                  }
+                }
+              ],
+              "configVars": {
+                "lightModulesPath": "{{ .DevboxProjectDir }}/modules"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
