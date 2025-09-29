@@ -19,7 +19,7 @@
   "shell": {
     "init_hook": [
       "eval \"$(fnm env --use-on-cd)\"",
-      "start-mgnl() { (cd {{ .Virtenv }} && exec npx @magnolia/cli@latest start -lmp ${DEVBOX_PROJECT_ROOT}/modules); }"
+      "mgnlup() { (cd {{ .Virtenv }} && exec npx @magnolia/cli@latest start -lmp ${DEVBOX_PROJECT_ROOT}/modules); }"
     ],
     "scripts": {
       "setup:magnolia": [
@@ -27,7 +27,7 @@
         "(cd {{ .Virtenv }} && npx @magnolia/cli@latest cli-tp-runner-plugin -m ${DEVBOX_PROJECT_ROOT}/manifests/magnolia -p ${DEVBOX_PROJECT_ROOT})"
       ],
       "start:magnolia": [
-        "start-mgnl"
+        "mgnlup"
       ]
     }
   }
