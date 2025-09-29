@@ -11,7 +11,7 @@
               "name": "dx-core",
               "bundles": [
                 {
-                  "url": "https://nexus.magnolia-cms.com/service/rest/v1/search/assets?sort=version&repository=public&maven.groupId=info.magnolia.tomcat.barebone&maven.artifactId=magnolia-tomcat-barebone&maven.extension=zip",
+                  "url": "https://nexus.magnolia-cms.com/service/rest/v1/search/assets?sort=version&version=1.*&repository=public&maven.groupId=info.magnolia.tomcat.barebone&maven.artifactId=magnolia-tomcat-barebone&maven.extension=zip",
                   "dest": "../../../.magnolia",
                   "postCommand": ["extract"]
                 }
