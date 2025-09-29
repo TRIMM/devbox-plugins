@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "description": "Local development helper for lightweight Magnolia development @ TRIMM",
   "packages": [
-    "fnm@1.38.1"
+    "fnm@1.38.1",
+    "temurin-bin@17.0.4"
   ],
   "create_files": {
     "{{ .Virtenv }}/mgnl.config.js": "mgnl/mgnl.config.js",
