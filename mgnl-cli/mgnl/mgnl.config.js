@@ -1,5 +1,5 @@
 import StartPlugin from "@magnolia/cli-start-plugin"
-import TrimmPlatformRunnerPlugin from "{{ .DevboxProjectDir }}/tp-runner/dist/index.js"
+import TrimmPlatformRunnerPlugin from "../../../tp-runner/dist/index.js"
 import JumpstartPlugin from "@magnolia/cli-jumpstart-plugin";
 
 export default {
@@ -9,7 +9,7 @@ export default {
   // Logger configuration
   // see: https://github.com/winstonjs/winston#logging for logging levels explanation
   logger: {
-    filename: '{{ .DevboxProjectDir }}/mgnl.error.log',
+    filename: '../../../mgnl.error.log',
     fileLevel: 'debug',
     consoleLevel: 'info'
   },
@@ -17,10 +17,10 @@ export default {
   plugins: [
     new JumpstartPlugin(),
     new StartPlugin({
-      tomcatPath: '{{ .DevboxProjectDir }}/.magnolia/apache-tomcat'
+      tomcatPath: '../../../.magnolia/apache-tomcat'
     }),
     new TrimmPlatformRunnerPlugin({
-      tomcatPath: '{{ .DevboxProjectDir }}/.magnolia/apache-tomcat'
+      tomcatPath: '../../../.magnolia/apache-tomcat'
     })
   ]
 };

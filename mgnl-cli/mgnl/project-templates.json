@@ -12,7 +12,7 @@
               "bundles": [
                 {
                   "url": "https://nexus.magnolia-cms.com/service/rest/v1/search/assets?sort=version&repository=public&maven.groupId=info.magnolia.tomcat.barebone&maven.artifactId=magnolia-tomcat-barebone&maven.extension=zip",
-                  "dest": "{{ .DevboxProjectDir }}/.magnolia",
+                  "dest": "../../../.magnolia",
                   "postCommand": ["extract"]
                 }
               ],
@@ -20,12 +20,12 @@
                 {
                   "plugin": "@magnolia/cli-start-plugin",
                   "pluginArgs": {
-                    "tomcatPath": "{{ .DevboxProjectDir }}/.magnolia/apache-tomcat"
+                    "tomcatPath": "../../../.magnolia/apache-tomcat"
                   }
                 }
               ],
               "configVars": {
-                "lightModulesPath": "{{ .DevboxProjectDir }}/modules"
+                "lightModulesPath": "../../../modules"
               }
             }
           ]
