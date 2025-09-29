@@ -1,5 +1,5 @@
 import StartPlugin from "@magnolia/cli-start-plugin"
-import TrimmPlatformRunnerPlugin from "../../../tp-runner/dist/index.js"
+import TrimmPlatformRunnerPlugin from "@technology/cli-tp-runner-plugin"
 import JumpstartPlugin from "@magnolia/cli-jumpstart-plugin";
 
 export default {
