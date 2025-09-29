@@ -20,7 +20,7 @@ export default {
       tomcatPath: '../../../.magnolia/apache-tomcat'
     }),
     new TrimmPlatformRunnerPlugin({
-      tomcatPath: '../../../.magnolia/apache-tomcat'
+      tomcatPath: './.magnolia/apache-tomcat'
     })
   ]
 };
