@@ -35,6 +35,10 @@
       "init": [
         "chmod +x {{ .Virtenv }}/init.sh",
         "{{ .Virtenv }}/init.sh"
+      ],
+      "setup:ca": [
+        "kubectl --context k3d-$(cat cluster.yaml | yq '.metadata.name') -n cert-manager get secrets root-secret -o jsonpath='{.data.ca\\.crt}' | base64 -d > ./.devbox/cacert.crt",
+        "sudo security add-trusted-cert -d -r trustRoot -k \"/Library/Keychains/System.keychain\" ./.devbox/cacert.crt"
       ]
     }
   }

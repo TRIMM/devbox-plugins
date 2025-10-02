@@ -2,7 +2,7 @@
 
 set -e
 
-CURRENT_VERSION="1.5.2"
+CURRENT_VERSION="1.5.3"
 
 if [ ! -f project.yaml ]; then
     gum style \
