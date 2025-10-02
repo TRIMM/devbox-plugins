@@ -21,7 +21,8 @@
     "GITLAB_HOST":                 "gitlab.trimm.nl",
     "GUM_INPUT_CURSOR_FOREGROUND": "#0d709a",
     "VAULT_ADDR":                  "https://vault.platform.trimm.net",
-    "POWERLEVEL9K_INSTANT_PROMPT": "off"
+    "POWERLEVEL9K_INSTANT_PROMPT": "off",
+    "NODE_EXTRA_CA_CERTS":         "$DEVBOX_PROJECT_ROOT/.keys/cacert.crt"
   },
   "shell": {
     "init_hook": [
