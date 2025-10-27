@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.16.0/.schema/devbox-plugin.schema.json",
   "name": "local-k8s",
-  "version": "0.1.0",
+  "version": "1.5.5",
   "description": "Local development helper for Kubernetes based development at TRIMM",
   "packages": [
     "kubectl@1.33.3",
@@ -29,7 +29,7 @@
       "unset DEVELOPER_DIR",
       "eval \"$(fnm env --use-on-cd)\"",
       "gum spin --show-output --spinner dot --title \"Initiating TRIMM Platform modules...\" -- fnm use 24 --install-if-missing",
-      "gum style --foreground \"#ffffff\" --background \"#0d709a\" --border double --border-background \"#0d709a\" --margin \"1\" --padding \"1 2\" --width \"100\" --align center \"$(gum style --bold 'TRIMM Platform')\" 'Local development' \"$(gum style --bold --foreground \"#ff005f\"--bold \"$(cat project.yaml | yq '.title') project\")\" \"Run \\\"menu\\\" to continue...\"",
+      "gum style --foreground \"#ffffff\" --background \"#0d709a\" --border double --border-background \"#0d709a\" --margin \"1\" --padding \"1 2\" --width \"100\" --align center \"$(gum style --bold 'TRIMM Platform')\" 'Local development' \"$(gum style --bold --foreground \"#ff005f\"--bold \"$(cat project.yaml | yq '.title') project\")\" 'You are now in a shell that contains specific tools like fnm, kubectl and bao' \"Use this shell or run \\\"menu\\\" to to continue...\"",
       "menu () { chmod +x {{ .Virtenv }}/init.sh; {{ .Virtenv }}/init.sh; }"
     ],
     "scripts": {
