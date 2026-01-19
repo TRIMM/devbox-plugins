@@ -30,13 +30,14 @@
       "eval \"$(fnm env --use-on-cd)\"",
       "gum spin --show-output --spinner dot --title \"Initiating TRIMM Platform modules...\" -- fnm use 24 --install-if-missing",
       "gum style --foreground \"#ffffff\" --background \"#0d709a\" --border double --border-background \"#0d709a\" --margin \"1\" --padding \"1 2\" --width \"100\" --align center \"$(gum style --bold 'TRIMM Platform')\" 'Local development' \"$(gum style --bold --foreground \"#ff005f\"--bold \"$(cat project.yaml | yq '.title') project\")\" 'You are now in a shell that contains specific tools like fnm, kubectl and bao' \"Use this shell or run \\\"menu\\\" to to continue...\"",
-      "menu () { chmod +x {{ .Virtenv }}/init.sh; {{ .Virtenv }}/init.sh; }"
+      "alias menu='devbox run menu'"
     ],
     "scripts": {
       "init": [
         "chmod +x {{ .Virtenv }}/init.sh",
         "{{ .Virtenv }}/init.sh"
       ],
+      "menu": "chmod +x {{ .Virtenv }}/init.sh; {{ .Virtenv }}/init.sh",
       "setup:ca": [
         "kubectl --context k3d-$(cat cluster.yaml | yq '.metadata.name') -n cert-manager get secrets root-secret -o jsonpath='{.data.ca\\.crt}' | base64 -d > ./.devbox/cacert.crt",
         "sudo security add-trusted-cert -d -r trustRoot -k \"/Library/Keychains/System.keychain\" ./.devbox/cacert.crt"

@@ -20,9 +20,10 @@
   "shell": {
     "init_hook": [
       "eval \"$(fnm env --use-on-cd)\"",
-      "mgnlup() { (cd {{ .Virtenv }} && exec npx @magnolia/cli@latest start -lmp ${DEVBOX_PROJECT_ROOT}/modules); }"
+      "alias mgnlup='devbox run mgnlup'"
     ],
     "scripts": {
+      "mgnlup": "cd {{ .Virtenv }} && exec npx @magnolia/cli@latest start -lmp ${DEVBOX_PROJECT_ROOT}/modules",
       "setup:magnolia": [
         "chmod +x {{ .Virtenv }}/vault-auth.sh",
         "{{ .Virtenv }}/vault-auth.sh",
