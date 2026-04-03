@@ -630,7 +630,7 @@ run () {
   authorize_gitlab
 
   set -e
-  OLD_CREDENTIAL_HELPER=$(git config --global credential.helper)
+  OLD_CREDENTIAL_HELPER=$(git config --global credential.helper) || true
   set +e
   git config --global credential.helper ""
   git config --global credential.https://gitlab.trimm.nl.helper '!f() { sleep 1; echo "username=oauth2"; echo "password=$(yq -r .access_token $HOME/.trimm-platform/tokens.json)"; }; f'
