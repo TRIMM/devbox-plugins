@@ -1,17 +1,17 @@
 {
   "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.16.0/.schema/devbox-plugin.schema.json",
   "name": "local-k8s",
-  "version": "1.5.5",
+  "version": "1.6.0",
   "description": "Local development helper for Kubernetes based development at TRIMM",
   "packages": [
-    "kubectl@1.33.3",
+    "kubectl@1.36.1",
     "kubectl-cnpg@1.26.1",
     "k3d@5.8.3",
-    "devspace@6.3.16",
-    "gum@0.16.2",
+    "devspace@6.3.21",
+    "gum@0.17.0",
     "fnm@1.38.1",
-    "yq-go@4.47.1",
-    "openbao@2.3.2"
+    "yq-go@4.53.2",
+    "openbao@2.5.3"
   ],
   "create_files": {
     "{{ .Virtenv }}/init.sh": "scripts/init.sh"
