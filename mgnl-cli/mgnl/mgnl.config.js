@@ -22,5 +22,6 @@ export default {
     new TrimmPlatformRunnerPlugin({
       tomcatPath: './.magnolia/apache-tomcat'
     })
-  ]
+  ],
+  lightModulesPath: "../../../modules"
 };
