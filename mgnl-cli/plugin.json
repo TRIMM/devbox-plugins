@@ -5,7 +5,7 @@
   "description": "Local development helper for lightweight Magnolia development @ TRIMM",
   "packages": [
     "fnm@1.38.1",
-    "temurin-bin@17.0.4",
+    "temurin-bin-25@25.0.0",
     "yq-go@4.53.2"
   ],
   "create_files": {
