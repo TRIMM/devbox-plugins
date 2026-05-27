@@ -27,6 +27,27 @@
               "configVars": {
                 "lightModulesPath": "../../../modules"
               }
+            },
+            {
+              "name": "community",
+              "bundles": [
+                {
+                  "url": "https://nexus.magnolia-cms.com/service/rest/v1/search/assets?sort=version&version=1.*&repository=public&maven.groupId=info.magnolia.tomcat.barebone&maven.artifactId=magnolia-tomcat-barebone&maven.extension=zip",
+                  "dest": "../../../.magnolia",
+                  "postCommand": ["extract"]
+                }
+              ],
+              "plugins": [
+                {
+                  "plugin": "@magnolia/cli-start-plugin",
+                  "pluginArgs": {
+                    "tomcatPath": "../../../.magnolia/apache-tomcat"
+                  }
+                }
+              ],
+              "configVars": {
+                "lightModulesPath": "../../../modules"
+              }
             }
           ]
         }
