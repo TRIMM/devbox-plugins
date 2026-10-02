@@ -32,6 +32,7 @@ const path = require('path');
 const { exec } = require('child_process');
 const https = require('https');
 const crypto = require('crypto');
+const readline = require('readline');
 const port = 8063;
 
 const GITLAB_HOSTNAME = process.env.GITLAB_HOST;
@@ -43,6 +44,7 @@ const TOKEN_URL = `${GITLAB_URL}/oauth/token`;
 const SCOPE = "read_api%20write_repository%20read_registry";
 const TOKEN_DIR = path.join(os.homedir(), '.trimm-platform');
 const TOKEN_FILE = path.join(TOKEN_DIR, "tokens.json");
+const IS_SSH = !!(process.env.SSH_CONNECTION || process.env.SSH_CLIENT || process.env.SSH_TTY);
 
 // PKCE Helper Functions
 function generateCodeVerifier() {
@@ -126,13 +128,38 @@ function startLocalServer() {
       }
     });
 
-    server.listen(port, err => {
-      if (err) {
-        reject(err);
-      } else {
-        console.log(`Server is listening on port ${port}`);
-      }
+    server.on('error', reject);
+
+    server.listen(port, () => {
+      if (!IS_SSH) console.log(`Server is listening on port ${port}`);
     });
+  });
+}
+
+// Function to fetch the GitLab user for a token, resolves with the status code and body
+function getUser(accessToken) {
+  return new Promise((resolve, reject) => {
+    const options = {
+      hostname: GITLAB_HOSTNAME,
+      path: '/api/v4/user',
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`
+      }
+    };
+
+    const req = https.request(options, res => {
+      let data = '';
+
+      res.on('data', chunk => {
+        data += chunk;
+      });
+
+      res.on('end', () => resolve({ statusCode: res.statusCode, data }));
+    });
+
+    req.on('error', reject);
+    req.end();
   });
 }
 
@@ -187,61 +214,22 @@ function exchangeCodeForToken(code, codeVerifier) {
   });
 }
 
-// Main function to handle the OAuth flow
-async function main() {
-  if (!fs.existsSync(TOKEN_DIR)) {
-    // Create the directory
-    fs.mkdirSync(TOKEN_DIR);
-    console.log(`Directory ${TOKEN_DIR} created successfully.`);
-  }
-  if (fs.existsSync(TOKEN_FILE)) {
-    const tokenData = JSON.parse(fs.readFileSync(TOKEN_FILE, 'utf8'));
-    const accessToken = tokenData.access_token;
+// Ask the user to paste the callback URL (or a personal access token) when running over SSH
+function promptManualInput() {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const answer = new Promise(resolve => rl.question('Callback URL or token: ', input => resolve(input.trim())));
+  return { answer, close: () => rl.close() };
+}
 
-    const options = {
-      hostname: GITLAB_HOSTNAME,
-      path: '/api/v4/user',
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`
-      }
-    };
+// Function to run the OAuth login flow
+async function login() {
+  const codeVerifier = generateCodeVerifier();
+  const codeChallenge = generateCodeChallenge(codeVerifier);
+  const authUrl = `${AUTH_URL}?client_id=${CLIENT_ID}&redirect_uri=${REDIRECT_URI}&response_type=code&scope=${SCOPE}&code_challenge=${codeChallenge}&code_challenge_method=S256`;
+  console.log("Please authorize the application by visiting the following URL:");
+  console.log(authUrl);
 
-    const req = https.request(options, res => {
-      let data = '';
-
-      res.on('data', chunk => {
-        data += chunk;
-      });
-
-      res.on('end', () => {
-        if (res.statusCode === 200) {
-          const userData = JSON.parse(data);
-          console.log("Using stored access token:", accessToken);
-          console.log("Authenticated as:", userData.username);
-        } else if (res.statusCode === 401) {
-          console.log("Access token expired, refreshing...");
-          refreshAccessToken();
-        } else {
-          console.error("Failed to verify access token:", data);
-          process.exit(1);
-        }
-      });
-    });
-
-    req.on('error', e => {
-      console.error("Failed to verify access token:", e);
-      process.exit(1);
-    });
-
-    req.end();
-  } else {
-    const codeVerifier = generateCodeVerifier();
-    const codeChallenge = generateCodeChallenge(codeVerifier);
-    const authUrl = `${AUTH_URL}?client_id=${CLIENT_ID}&redirect_uri=${REDIRECT_URI}&response_type=code&scope=${SCOPE}&code_challenge=${codeChallenge}&code_challenge_method=S256`;
-    console.log("Please authorize the application by visiting the following URL:");
-    console.log(authUrl);
-
+  if (!IS_SSH) {
     openBrowser(authUrl);
     console.log("Starting local server to capture the authorization code...");
     const code = await startLocalServer();
@@ -253,6 +241,85 @@ async function main() {
 
     console.log("Authorization code received:", code);
     await exchangeCodeForToken(code, codeVerifier);
+    return;
+  }
+
+  console.log("");
+  console.log("SSH session detected, open the URL above in your local browser.");
+  console.log(`- With port ${port} forwarded (ssh -L ${port}:localhost:${port}) the login completes automatically.`);
+  console.log(`- Otherwise the browser ends up on a localhost:${port} page that fails to load,`);
+  console.log("  copy that URL from the address bar and paste it below.");
+  console.log("- Or paste a GitLab personal access token (scopes: read_api, write_repository, read_registry).");
+  console.log("");
+
+  const prompt = promptManualInput();
+  // If the port is unavailable, just wait for manual input
+  const callback = startLocalServer().then(code => ({ code }), () => new Promise(() => {}));
+  const result = await Promise.race([callback, prompt.answer.then(input => ({ input }))]);
+  prompt.close();
+
+  if (result.code) {
+    console.log("Authorization code received:", result.code);
+    await exchangeCodeForToken(result.code, codeVerifier);
+  } else if (/^https?:\/\//.test(result.input)) {
+    const code = new URL(result.input).searchParams.get('code');
+    if (!code) {
+      console.error("No authorization code found in the pasted URL.");
+      process.exit(1);
+    }
+    await exchangeCodeForToken(code, codeVerifier);
+  } else if (result.input) {
+    const { statusCode, data } = await getUser(result.input);
+    if (statusCode !== 200) {
+      console.error("Token rejected by GitLab:", data);
+      process.exit(1);
+    }
+    fs.writeFileSync(TOKEN_FILE, JSON.stringify({ access_token: result.input, token_type: 'personal' }, null, 2));
+    console.log("Authenticated as:", JSON.parse(data).username);
+  } else {
+    console.error("No input given.");
+    process.exit(1);
+  }
+
+  // The callback server may still be listening
+  process.exit(0);
+}
+
+// Main function to handle the OAuth flow
+async function main() {
+  if (!fs.existsSync(TOKEN_DIR)) {
+    // Create the directory
+    fs.mkdirSync(TOKEN_DIR);
+    console.log(`Directory ${TOKEN_DIR} created successfully.`);
+  }
+  if (!fs.existsSync(TOKEN_FILE)) {
+    await login();
+    return;
+  }
+
+  const tokenData = JSON.parse(fs.readFileSync(TOKEN_FILE, 'utf8'));
+  const accessToken = tokenData.access_token;
+
+  let response;
+  try {
+    response = await getUser(accessToken);
+  } catch (e) {
+    console.error("Failed to verify access token:", e);
+    process.exit(1);
+  }
+
+  if (response.statusCode === 200) {
+    console.log("Using stored access token:", accessToken);
+    console.log("Authenticated as:", JSON.parse(response.data).username);
+  } else if (response.statusCode === 401 && tokenData.refresh_token) {
+    console.log("Access token expired, refreshing...");
+    refreshAccessToken();
+  } else if (response.statusCode === 401) {
+    console.log("Stored token is no longer valid, logging in again...");
+    await login();
+  } else {
+    console.error("Failed to verify access token:", response.data);
+    process.exit(1);
   }
 }
 
@@ -273,7 +340,7 @@ authorize_gitlab () {
   set +e
 
   echo "Now we will authenticate with the TRIMM Platform GitLab application"
-  echo "$gitlab_auth" | node -
+  node -e "$gitlab_auth"
 
   sleep 1
 
@@ -465,6 +532,26 @@ setup_pullsecrets () {
   fi
 }
 
+is_ssh () {
+  [ -n "$SSH_CONNECTION" ] || [ -n "$SSH_CLIENT" ] || [ -n "$SSH_TTY" ]
+}
+
+# The OIDC callback listens on localhost:8250 of this machine, which a browser on
+# the SSH client can't reach without a port forward. Offer a token paste instead.
+vault_login_ssh () {
+  SSO="SSO       - requires port forward: ssh -L 8250:localhost:8250"
+  TOKEN="Token     - paste a token (Vault UI > user menu > Copy token)"
+  METHOD=$(gum choose --header "SSH session detected, how do you want to login to Vault?" "$SSO" "$TOKEN")
+
+  if [ "$METHOD" == "$TOKEN" ]; then
+    VAULT_LOGIN_TOKEN=$(gum input --password --placeholder "Vault token")
+    [ -n "$VAULT_LOGIN_TOKEN" ] && echo "$VAULT_LOGIN_TOKEN" | bao login -
+  else
+    echo "Open the URL below in your local browser:"
+    bao login -method=oidc skip_browser=true
+  fi
+}
+
 process_secrets () {
   echo "Now we will setup your local secrets, I'll fetch them from the Platform Vault"
 
@@ -497,7 +584,11 @@ process_secrets () {
           --margin "1" --padding "0 0" --width "100" --align center \
           "Note: Login to Vault, using SSO."
 
-        gum spin --spinner line --title "Logging in to TRIMM Platform Vault" -- bao login -method=oidc
+        if is_ssh; then
+          vault_login_ssh
+        else
+          gum spin --spinner line --title "Logging in to TRIMM Platform Vault" -- bao login -method=oidc
+        fi
       else
         echo "Authenticated to TRIMM Platform Vault"
 
