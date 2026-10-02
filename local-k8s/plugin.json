@@ -4,14 +4,14 @@
   "version": "1.6.0",
   "description": "Local development helper for Kubernetes based development at TRIMM",
   "packages": [
-    "kubectl@1.36.1",
-    "kubectl-cnpg@1.26.1",
-    "k3d@5.8.3",
+    "kubectl@1.36.3",
+    "kubectl-cnpg@1.30.0",
+    "k3d@5.9.0",
     "devspace@6.3.21",
     "gum@0.17.0",
-    "fnm@1.38.1",
-    "yq-go@4.53.2",
-    "openbao@2.5.3"
+    "fnm@1.39.0",
+    "yq-go@4.53.3",
+    "openbao@2.6.2"
   ],
   "create_files": {
     "{{ .Virtenv }}/init.sh": "scripts/init.sh"
