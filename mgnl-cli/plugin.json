@@ -1,12 +1,12 @@
 {
   "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.16.0/.schema/devbox-plugin.schema.json",
   "name": "mgnl-cli",
-  "version": "0.1.0",
+  "version": "2.1.0",
   "description": "Local development helper for lightweight Magnolia development @ TRIMM",
   "packages": [
-    "fnm@1.38.1",
+    "fnm@1.39.0",
     "temurin-bin-25@25.0.0",
-    "yq-go@4.53.2"
+    "yq-go@4.53.3"
   ],
   "create_files": {
     "{{ .Virtenv }}/mgnl.config.js": "mgnl/mgnl.config.js",
