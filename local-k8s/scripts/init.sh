@@ -347,6 +347,28 @@ authorize_gitlab () {
   set -e
 }
 
+# gum spin hides the output of the command it wraps, so a failing git/kubectl
+# call leaves nothing on screen -- and because this script runs under `set -e`,
+# the failure silently takes the whole menu down with it. Run the step with
+# --show-error, which prints the command's output when (and only when) it
+# fails, and follow that with an explicit summary line.
+run_step () {
+  local title="$1"; shift
+  local code=0
+
+  gum spin -s "${RUN_STEP_SPINNER:-line}" --show-error --title "$title" -- "$@" || code=$?
+
+  if [ "$code" -ne 0 ]; then
+    gum style \
+      --foreground "#ffffff" --background "#ff0000" \
+      --margin "0 1" --padding "0 1" \
+      "✗ $title failed (exit $code)" \
+      "  $*"
+  fi
+
+  return "$code"
+}
+
 setup_modules () {
   if [ -n "$(echo "$config" | yq ".modules[].name")" ]; then
     if [ "$(echo "$config" | yq ".modules | length")" -eq 1 ]; then
@@ -373,11 +395,12 @@ setup_modules () {
         # Check if directory already exists
         if [ -d "$module_directory" ]; then
             echo "Directory $module_directory already exists. Reverting to git pull."
-            gum spin -s line --title "Pulling $module_name..." -- git -C "./$module_directory" pull origin
+            run_step "Pulling $module_name..." git -C "./$module_directory" pull origin || true
             sleep 1;
         else
-            gum spin -s line --title "Cloning $module_name..." -- git clone "https://oauth2:$token@gitlab.trimm.nl/$repo.git" "$module_directory"
-            git -C "./$module_directory" remote set-url origin "git@gitlab.trimm.nl:$repo.git"
+            if run_step "Cloning $module_name..." git clone "https://oauth2:$token@gitlab.trimm.nl/$repo.git" "$module_directory"; then
+              git -C "./$module_directory" remote set-url origin "git@gitlab.trimm.nl:$repo.git"
+            fi
         fi
       done <<< "$MODULES"
     fi
@@ -412,11 +435,12 @@ setup_frontends () {
         # Check if directory already exists
         if [ -d "$frontend_directory" ]; then
             echo "Directory $frontend_directory already exists. Reverting to git pull."
-            gum spin -s line --title "Pulling $frontend_name..." -- git -C "./$frontend_directory" pull origin
+            run_step "Pulling $frontend_name..." git -C "./$frontend_directory" pull origin || true
             sleep 1;
         else
-            gum spin -s line --title "Cloning $frontend_name..." -- git clone "https://oauth2:$token@gitlab.trimm.nl/$repo.git" "$frontend_directory"
-            git -C "./$frontend_directory" remote set-url origin "git@gitlab.trimm.nl:$repo.git"
+            if run_step "Cloning $frontend_name..." git clone "https://oauth2:$token@gitlab.trimm.nl/$repo.git" "$frontend_directory"; then
+              git -C "./$frontend_directory" remote set-url origin "git@gitlab.trimm.nl:$repo.git"
+            fi
         fi
       done <<< "$FRONTENDS"
     fi
@@ -453,11 +477,12 @@ setup_services () {
         # Check if directory already exists
         if [ -d "$project_directory" ]; then
             echo "Directory $project_directory already exists. Reverting to git pull."
-            gum spin -s line --title "Pulling $service_name..." -- git -C "./$project_directory" pull origin
+            run_step "Pulling $service_name..." git -C "./$project_directory" pull origin || true
             sleep 1;
         else
-            gum spin -s line --title "Cloning $service_name..." -- git clone "https://oauth2:$token@gitlab.trimm.nl/$repo.git" "$project_directory"
-            git -C "./$project_directory" remote set-url origin "git@gitlab.trimm.nl:$repo.git"
+            if run_step "Cloning $service_name..." git clone "https://oauth2:$token@gitlab.trimm.nl/$repo.git" "$project_directory"; then
+              git -C "./$project_directory" remote set-url origin "git@gitlab.trimm.nl:$repo.git"
+            fi
         fi
       done <<< "$SERVICES"
     fi
@@ -478,11 +503,12 @@ setup_manifests () {
         # Check if directory already exists
         if [ -d "$project_directory" ]; then
             echo "Directory $project_directory already exists. Reverting to git pull."
-            gum spin -s line --title "Pulling $project_directory..." -- git -C "./$project_directory" pull origin
+            run_step "Pulling $project_directory..." git -C "./$project_directory" pull origin || true
             sleep 1;
         else
-            gum spin -s line --title "Cloning $project_directory..." -- git clone "https://oauth2:$token@gitlab.trimm.nl/$repo.git" "$project_directory"
-            git -C "./$project_directory" remote set-url origin "git@gitlab.trimm.nl:$repo.git"
+            if run_step "Cloning $project_directory..." git clone "https://oauth2:$token@gitlab.trimm.nl/$repo.git" "$project_directory"; then
+              git -C "./$project_directory" remote set-url origin "git@gitlab.trimm.nl:$repo.git"
+            fi
         fi
       fi
 
@@ -492,11 +518,12 @@ setup_manifests () {
         # Check if directory already exists
         if [ -d "$project_directory" ]; then
             echo "Directory $project_directory already exists. Reverting to git pull."
-            gum spin -s line --title "Pulling $project_directory..." -- git -C "./$project_directory" pull origin
+            run_step "Pulling $project_directory..." git -C "./$project_directory" pull origin || true
             sleep 1;
         else
-            gum spin -s line --title "Cloning $project_directory..." -- git clone "https://oauth2:$token@gitlab.trimm.nl/$repo.git" "$project_directory"
-            git -C "./$project_directory" remote set-url origin "git@gitlab.trimm.nl:$repo.git"
+            if run_step "Cloning $project_directory..." git clone "https://oauth2:$token@gitlab.trimm.nl/$repo.git" "$project_directory"; then
+              git -C "./$project_directory" remote set-url origin "git@gitlab.trimm.nl:$repo.git"
+            fi
         fi
       fi
     fi
@@ -532,24 +559,62 @@ setup_pullsecrets () {
   fi
 }
 
-is_ssh () {
-  [ -n "$SSH_CONNECTION" ] || [ -n "$SSH_CLIENT" ] || [ -n "$SSH_TTY" ]
+# Port the OIDC flow listens on for its callback.
+VAULT_OIDC_PORT=8250
+
+# True when this shell has no browser of its own, so the OIDC callback on
+# localhost:$VAULT_OIDC_PORT cannot be reached.
+#
+# The SSH_* variables alone are not a reliable signal: JetBrains Remote
+# Development starts its backend over SSH and terminals spawned from the IDE do
+# not consistently inherit them, which sent those sessions down the desktop
+# branch and left `bao login` waiting on a callback that never arrived. On macOS
+# ask launchd instead -- only a real GUI login session reports "Aqua".
+is_headless () {
+  if [ -n "$SSH_CONNECTION" ] || [ -n "$SSH_CLIENT" ] || [ -n "$SSH_TTY" ]; then
+    return 0
+  fi
+
+  if [ "$(uname)" = "Darwin" ] && [ "$(launchctl managername 2>/dev/null)" != "Aqua" ]; then
+    return 0
+  fi
+
+  return 1
 }
 
-# The OIDC callback listens on localhost:8250 of this machine, which a browser on
-# the SSH client can't reach without a port forward. Offer a token paste instead.
-vault_login_ssh () {
-  SSO="SSO       - requires port forward: ssh -L 8250:localhost:8250"
-  TOKEN="Token     - paste a token (Vault UI > user menu > Copy token)"
-  METHOD=$(gum choose --header "SSH session detected, how do you want to login to Vault?" "$SSO" "$TOKEN")
+# An interrupted login leaves bao holding the callback port, and every later
+# `bao login -method=oidc` then fails to bind it.
+vault_clear_stale_callback () {
+  local pid
+  pid=$(lsof -nP -iTCP:"$VAULT_OIDC_PORT" -sTCP:LISTEN -t 2>/dev/null | head -1) || true
+  [ -z "$pid" ] && return 0
 
-  if [ "$METHOD" == "$TOKEN" ]; then
-    VAULT_LOGIN_TOKEN=$(gum input --password --placeholder "Vault token")
-    [ -n "$VAULT_LOGIN_TOKEN" ] && echo "$VAULT_LOGIN_TOKEN" | bao login -
-  else
+  echo "Port $VAULT_OIDC_PORT is still held by an earlier Vault login (pid $pid)."
+  if gum confirm "Stop it so this login can bind the callback port?"; then
+    kill "$pid" 2>/dev/null || true
+    sleep 1
+  fi
+}
+
+vault_login_headless () {
+  TOKEN="Token     - paste a token (Vault UI > user menu > Copy token)"
+  SSO="SSO       - needs a port forward: ssh -L $VAULT_OIDC_PORT:localhost:$VAULT_OIDC_PORT"
+  METHOD=$(gum choose --header "No local browser available, how do you want to login to Vault?" "$TOKEN" "$SSO")
+
+  if [ "$METHOD" == "$SSO" ]; then
+    vault_clear_stale_callback
     echo "Open the URL below in your local browser:"
     bao login -method=oidc skip_browser=true
+    return $?
   fi
+
+  VAULT_LOGIN_TOKEN=$(gum input --password --placeholder "Vault token")
+  if [ -z "$VAULT_LOGIN_TOKEN" ]; then
+    echo "No token entered."
+    return 1
+  fi
+
+  printf '%s' "$VAULT_LOGIN_TOKEN" | bao login -
 }
 
 process_secrets () {
@@ -574,26 +639,48 @@ process_secrets () {
   fi
 
   set +e;
+  local vault_attempts=0
   while :
     do
-      bao token lookup 2>&1 | grep "permission denied" > /dev/null
-      if [[ $? -eq 0 ]]; then
-        gum style \
-          --foreground "#ffffff" --background "#0d709a" \
-          --border double --border-background "#0d709a" \
-          --margin "1" --padding "0 0" --width "100" --align center \
-          "Note: Login to Vault, using SSO."
-
-        if is_ssh; then
-          vault_login_ssh
-        else
-          gum spin --spinner line --title "Logging in to TRIMM Platform Vault" -- bao login -method=oidc
-        fi
-      else
+      # Any failure of `bao token lookup` means we cannot use Vault yet: no
+      # token, an expired one, or a 403. Matching only the literal string
+      # "permission denied" reported every other failure -- an unreachable
+      # VAULT_ADDR included -- as a successful login, and the confusing error
+      # only surfaced later at `bao kv get`.
+      if bao token lookup > /dev/null 2>&1; then
         echo "Authenticated to TRIMM Platform Vault"
 
         break
       fi
+
+      vault_attempts=$((vault_attempts + 1))
+      if [ "$vault_attempts" -gt 3 ]; then
+        gum style \
+          --foreground "#ffffff" --background "#ff0000" \
+          --border double --border-background "#ff0000" \
+          --margin "1" --padding "0 0" --width "100" --align center \
+          "Could not authenticate to Vault after 3 attempts." \
+          "Skipping secrets - add them to .env manually (see project.yaml:secrets)."
+        read -n 1 -s -r -p "Press any key to continue..."
+        set -e
+        return 0
+      fi
+
+      gum style \
+        --foreground "#ffffff" --background "#0d709a" \
+        --border double --border-background "#0d709a" \
+        --margin "1" --padding "0 0" --width "100" --align center \
+        "Note: You are not logged in to Vault."
+
+      if is_headless; then
+        vault_login_headless
+      else
+        vault_clear_stale_callback
+        # Deliberately not wrapped in `gum spin`: the OIDC flow prints the URL
+        # to open and the spinner would hide it.
+        bao login -method=oidc
+      fi
+
       sleep 1
     done
   set -e
@@ -689,7 +776,7 @@ setup () {
 update () {
   deploys=`kubectl get deployments -o name`
   for deploy in $deploys; do
-    gum spin -s monkey --title "Rolling out $deploy to force image updates" -- kubectl rollout restart $deploy && kubectl rollout status $deploy
+    RUN_STEP_SPINNER=monkey run_step "Rolling out $deploy to force image updates" kubectl rollout restart $deploy && kubectl rollout status $deploy
   done
 
   clear; menu
@@ -796,7 +883,7 @@ menu () {
   grep -q "$RUN"     <<< "$ACTIONS" && run
   grep -q "$UPDATE"  <<< "$ACTIONS" && update
   grep -q "$REFRESH" <<< "$ACTIONS" && refresh_gitlab
-  grep -q "$STOP"    <<< "$ACTIONS" && gum spin -s monkey --title "Stopping k3d cluster" -- k3d cluster stop $(echo "$clusterconfig" | yq ".metadata.name")
+  grep -q "$STOP"    <<< "$ACTIONS" && RUN_STEP_SPINNER=monkey run_step "Stopping k3d cluster" k3d cluster stop $(echo "$clusterconfig" | yq ".metadata.name")
   grep -q "$DISCARD" <<< "$ACTIONS" && discard
 }
 
