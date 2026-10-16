@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.16.0/.schema/devbox-plugin.schema.json",
   "name": "local-k8s",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Local development helper for Kubernetes based development at TRIMM",
   "packages": [
     "kubectl@1.36.3",
@@ -14,7 +14,8 @@
     "openbao@2.6.2"
   ],
   "create_files": {
-    "{{ .Virtenv }}/init.sh": "scripts/init.sh"
+    "{{ .Virtenv }}/init.sh": "scripts/init.sh",
+    "{{ .Virtenv }}/sync-secrets.sh": "scripts/sync-secrets.sh"
   },
   "env": {
     "GITLAB_CLIENT_ID":            "642eb160ffedb351ead89f16a665ebd8c827328c2f67d40841184626d992cef9",
@@ -38,6 +39,7 @@
         "{{ .Virtenv }}/init.sh"
       ],
       "menu": "chmod +x {{ .Virtenv }}/init.sh; {{ .Virtenv }}/init.sh",
+      "secrets:sync": "chmod +x {{ .Virtenv }}/sync-secrets.sh && {{ .Virtenv }}/sync-secrets.sh",
       "setup:ca": [
         "kubectl --context k3d-$(cat cluster.yaml | yq '.metadata.name') -n cert-manager get secrets root-secret -o jsonpath='{.data.ca\\.crt}' | base64 -d > ./.devbox/cacert.crt",
         "sudo security add-trusted-cert -d -r trustRoot -k \"/Library/Keychains/System.keychain\" ./.devbox/cacert.crt"

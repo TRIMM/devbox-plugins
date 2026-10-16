@@ -2,7 +2,7 @@
 
 set -e
 
-CURRENT_VERSION="2.1.0"
+CURRENT_VERSION="2.2.0"
 
 if [ ! -f project.yaml ]; then
     gum style \
@@ -716,6 +716,19 @@ process_secrets () {
   sleep 3; clear
 }
 
+# project.yaml:role_secrets -- per-service .env values read with the project's
+# AppRole. Implemented in sync-secrets.sh, which lives next to this script in
+# the devbox virtenv.
+sync_role_secrets () {
+  if [ "$(echo "$config" | yq ".role_secrets // [] | length")" -eq 0 ]; then
+    return 0
+  fi
+
+  echo "Syncing service secrets from the Platform Vault"
+  chmod +x "$(dirname "$0")/sync-secrets.sh"
+  "$(dirname "$0")/sync-secrets.sh"
+}
+
 setup_cluster () {
   clustername=$(echo "$clusterconfig" | yq ".metadata.name")
   name=$(echo "$clusterconfig" | yq ".metadata.name")
@@ -769,6 +782,12 @@ setup () {
   else
     echo "No secrets found, continuing..."
   fi
+
+  # Independent of the block above: a project may carry role_secrets without
+  # any SSO-fetched secrets. A service that is not set up yet has no .env to
+  # merge into, which the sync reports and exits non-zero for -- that must not
+  # abort the setup.
+  sync_role_secrets || true
 
   clear; menu
 }
@@ -874,15 +893,17 @@ menu () {
   STOP="Stop/pause    - pause a complete environment";
   REFRESH="Refresh       - updates GitLab token";
   UPDATE="Update        - pulls latest images";
+  SECRETS="Secrets       - sync service .env values from Vault";
   DISCARD="Discard       - remove token & containers";
   EXIT="Exit          - return to nix shell";
-  ACTIONS=$(gum choose "$RUN" "$STOP" "$SHELL" "$SETUP" "$UPDATE" "$REFRESH" "$DISCARD" "$EXIT")
+  ACTIONS=$(gum choose "$RUN" "$STOP" "$SHELL" "$SETUP" "$UPDATE" "$REFRESH" "$SECRETS" "$DISCARD" "$EXIT")
 
   grep -q "$SHELL"   <<< "$ACTIONS" && enter
   grep -q "$SETUP"   <<< "$ACTIONS" && setup
   grep -q "$RUN"     <<< "$ACTIONS" && run
   grep -q "$UPDATE"  <<< "$ACTIONS" && update
   grep -q "$REFRESH" <<< "$ACTIONS" && refresh_gitlab
+  grep -q "$SECRETS" <<< "$ACTIONS" && { sync_role_secrets || true; read -n 1 -s -r -p "Press any key to continue..."; clear; menu; }
   grep -q "$STOP"    <<< "$ACTIONS" && RUN_STEP_SPINNER=monkey run_step "Stopping k3d cluster" k3d cluster stop $(echo "$clusterconfig" | yq ".metadata.name")
   grep -q "$DISCARD" <<< "$ACTIONS" && discard
 }
