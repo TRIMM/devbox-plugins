@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.16.0/.schema/devbox-plugin.schema.json",
   "name": "mgnl-cli",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "description": "Local development helper for lightweight Magnolia development @ TRIMM",
   "packages": [
     "fnm@1.39.0",

@@ -34,20 +34,32 @@
 # same key differ only by which one the reader happens to take last.
 #
 # Usage:
-#   devbox run secrets:sync              # sync every entry
-#   devbox run secrets:sync --dry-run    # report what would change, write nothing
-#   devbox run secrets:sync <filter>     # only entries whose path or file match
+#   devbox run secrets:sync      # sync every entry
+#   devbox run secrets:check     # report what would change, write nothing
+#
+# `devbox run` does not forward arguments to a script, so the flags below are
+# reachable only by calling this file directly -- or through the environment,
+# which does survive the trip:
+#
+#   SECRETS_SYNC_DRY_RUN=1 devbox run secrets:sync
+#   SECRETS_SYNC_FILTER=integration-hub devbox run secrets:sync
+#
+#   --dry-run         report what would change, write nothing
+#   <filter>          only entries whose path or file contain this string
 
 set -euo pipefail
 umask 077
 
-DRY_RUN=false
-FILTER=""
+case "${SECRETS_SYNC_DRY_RUN:-}" in
+  1|true|yes|on) DRY_RUN=true ;;
+  *)             DRY_RUN=false ;;
+esac
+FILTER="${SECRETS_SYNC_FILTER:-}"
 
 while [ $# -gt 0 ]; do
   case "$1" in
     -n|--dry-run) DRY_RUN=true ;;
-    -h|--help)    sed -n '2,41p' "$0" | sed 's/^#\{1,2\} \{0,1\}//'; exit 0 ;;
+    -h|--help)    sed -n '2,49p' "$0" | sed 's/^#\{1,2\} \{0,1\}//'; exit 0 ;;
     -*)           echo "Unknown option: $1" >&2; exit 2 ;;
     *)            FILTER="$1" ;;
   esac

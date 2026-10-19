@@ -76,8 +76,11 @@ and ordering all survive, as do the file's permissions.
   out, with a note saying why. Two definitions of one key differ only by which
   the reader happens to take last, so the block would otherwise silently
   shadow the placeholder a `.env.example` ships with.
-- `devbox run secrets:sync -- --dry-run` reports changes and writes nothing.
-- A positional argument filters entries by path or file.
+- `devbox run secrets:check` reports changes and writes nothing.
+- `devbox run` does not forward arguments to a script, so the filter and the
+  dry run travel by environment instead: `SECRETS_SYNC_FILTER=<substring>` and
+  `SECRETS_SYNC_DRY_RUN=1`. Both are also plain flags when the script is
+  called directly.
 - A target `.env` that does not exist yet is reported and skipped, so the
   setup of a freshly cloned project is not blocked by it.
 - Dropping an entry from `role_secrets` leaves its block behind; delete it by
