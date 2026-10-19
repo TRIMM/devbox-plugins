@@ -53,15 +53,32 @@ devbox run secrets:sync
 ```
 
 It logs in with `VAULT_ROLE_ID` + `VAULT_ROLE_SECRET` from the project `.env`
-and merges **every** key of each secret into the target file. *Setup/update*
-runs it too, and the menu has a **Secrets** entry for it.
+and writes **every** key of each secret into a block the Vault path owns at
+the end of the target file:
 
-Unlike `secrets`, this is re-runnable: keys are upserted in place, keeping
-their position in the file, so a rotated value only needs another sync. Keys
-that are not in Vault — `APP_KEY`, local database settings — are never
-touched, and the file's permissions are preserved.
+```sh
+# >>> vault:platform/<customer>/<env>/<secret> >>>
+# Written by `devbox run secrets:sync`. Edits here are overwritten, and
+# keys dropped from the Vault secret are dropped here.
+KEYCLOAK_ADMIN_PANEL_CLIENT_SECRET=…
+# <<< vault <<<
+```
 
+*Setup/update* runs it too, and the menu has a **Secrets** entry for it.
+
+The block is rewritten whole on every run, which is what makes the sync
+re-runnable in both directions: a rotated value is replaced, and a key dropped
+from the Vault secret disappears from `.env` instead of lingering. Nothing
+outside the block is touched — `APP_KEY`, local database settings, comments
+and ordering all survive, as do the file's permissions.
+
+- **One exception:** a live definition of a key the block owns is commented
+  out, with a note saying why. Two definitions of one key differ only by which
+  the reader happens to take last, so the block would otherwise silently
+  shadow the placeholder a `.env.example` ships with.
 - `devbox run secrets:sync -- --dry-run` reports changes and writes nothing.
 - A positional argument filters entries by path or file.
 - A target `.env` that does not exist yet is reported and skipped, so the
   setup of a freshly cloned project is not blocked by it.
+- Dropping an entry from `role_secrets` leaves its block behind; delete it by
+  hand.

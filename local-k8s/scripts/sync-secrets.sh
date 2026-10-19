@@ -11,7 +11,7 @@
 #      with the VAULT_ROLE_ID already in .env forms the project's AppRole.
 #   2. Logging in with that AppRole yields a token scoped to the project's own
 #      secrets -- the same ones its in-cluster workloads read. This script
-#      merges those, key for key, into the per-service .env files listed under
+#      merges those into the per-service .env files listed under
 #      project.yaml:role_secrets:
 #
 #        role_secrets:
@@ -21,9 +21,17 @@
 # Services run locally (DDEV, a dev server) read their own .env rather than the
 # injected cluster environment, which is the gap this closes.
 #
-# Re-runnable by design: every key is upserted in place, so rotating a value in
-# Vault and running this again is enough. Keys that are not in Vault are left
-# untouched, as is everything else in the file.
+# Each Vault path owns a marked block at the end of its target file:
+#
+#   # >>> vault:platform/<customer>/<env>/<secret> >>>
+#   KEY=value
+#   # <<< vault <<<
+#
+# The block is rewritten whole on every run, so a key dropped from the Vault
+# secret disappears from .env too -- which an in-place upsert could never do.
+# Nothing outside the block is touched, with one exception: a definition of a
+# key the block owns is commented out, because two live definitions of the
+# same key differ only by which one the reader happens to take last.
 #
 # Usage:
 #   devbox run secrets:sync              # sync every entry
@@ -39,7 +47,7 @@ FILTER=""
 while [ $# -gt 0 ]; do
   case "$1" in
     -n|--dry-run) DRY_RUN=true ;;
-    -h|--help)    sed -n '2,33p' "$0" | sed 's/^#\{1,2\} \{0,1\}//'; exit 0 ;;
+    -h|--help)    sed -n '2,41p' "$0" | sed 's/^#\{1,2\} \{0,1\}//'; exit 0 ;;
     -*)           echo "Unknown option: $1" >&2; exit 2 ;;
     *)            FILTER="$1" ;;
   esac
@@ -49,7 +57,7 @@ done
 ROOT="${DEVBOX_PROJECT_ROOT:-$PWD}"
 cd "$ROOT"
 
-die () { printf '\nError: %s\n' "$1" >&2; exit 1; }
+die ()  { printf '\nError: %s\n' "$1" >&2; exit 1; }
 warn () { printf 'Warning: %s\n' "$1" >&2; FAILED=true; }
 
 for tool in bao yq; do
@@ -61,9 +69,11 @@ done
 
 export VAULT_ADDR="${VAULT_ADDR:-https://vault.platform.trimm.net}"
 
-# Read a single value out of a .env file without sourcing it -- the workspace
-# .env uses `;` comments, which a shell would choke on. Last definition wins,
-# matching how the file is read when it is appended to.
+BLOCK_END='# <<< vault <<<'
+
+# Read a single value out of a .env file without sourcing it -- a project .env
+# may use `;` comments, which a shell would choke on. Last definition wins,
+# matching how the file is read back.
 env_get () {
   [ -f "$1" ] || return 0
   local raw
@@ -93,21 +103,31 @@ env_quote () {
   esac
 }
 
-# Upsert KEY=VALUE in FILE, in place, keeping the file's permissions, inode and
-# the existing entry's position. A quoted value spanning several lines is
-# replaced whole: phpdotenv reads it back as one value, so overwriting only its
-# first line would leave the tail behind as stray lines.
-env_set () {
-  local file="$1" key="$2" value="$3" tmp
+# The KEY=value lines of the block a given Vault path owns in a file.
+block_get () {
+  [ -f "$1" ] || return 0
+  BLOCK_START="# >>> vault:$2 >>>" BLOCK_END="$BLOCK_END" awk '
+    BEGIN { s = ENVIRON["BLOCK_START"]; e = ENVIRON["BLOCK_END"] }
+    $0 == s   { inb = 1; next }
+    inb && $0 == e { inb = 0; next }
+    inb && /^#/ { next }
+    inb { print }
+  ' "$1"
+}
+
+# Replace (or append) the block a Vault path owns, and comment out any live
+# definition of a key the block now owns. Keeps the file's mode and inode.
+block_write () {
+  local file="$1" path="$2" body="$3" keys="$4" tmp
   tmp="$(mktemp "${TMPDIR:-/tmp}/sync-secrets.XXXXXX")"
-  KEY="$key" VALUE="$(env_quote "$value")" awk '
+  BLOCK_START="# >>> vault:$path >>>" BLOCK_END="$BLOCK_END" BODY="$body" KEYS=" $keys " awk '
     function opens_multiline(v,   i, c, esc) {
       if (substr(v, 1, 1) != "\"") return 0
       for (i = 2; i <= length(v); i++) {
         c = substr(v, i, 1)
-        if (esc)        { esc = 0; continue }
-        if (c == "\\")  { esc = 1; continue }
-        if (c == "\"")  return 0
+        if (esc)       { esc = 0; continue }
+        if (c == "\\") { esc = 1; continue }
+        if (c == "\"") return 0
       }
       return 1
     }
@@ -120,23 +140,48 @@ env_set () {
       }
       return 0
     }
-    BEGIN { key = ENVIRON["KEY"]; value = ENVIRON["VALUE"]; pattern = "^[[:space:]]*(export[[:space:]]+)?" key "=" }
-    skipping { if (closes_multiline($0)) skipping = 0; next }
-    !replaced && $0 ~ pattern {
-      rest = $0
-      sub(pattern, "", rest)
-      prefix = ($0 ~ /^[[:space:]]*export[[:space:]]/) ? "export " : ""
-      print prefix key "=" value
-      replaced = 1
-      if (opens_multiline(rest)) skipping = 1
-      next
+    function emit_block() {
+      print s
+      print "# Written by `devbox run secrets:sync`. Edits here are overwritten, and"
+      print "# keys dropped from the Vault secret are dropped here."
+      printf "%s", body
+      print e
     }
-    { print }
-    END { if (!replaced) print key "=" value }
+    BEGIN {
+      s = ENVIRON["BLOCK_START"]; e = ENVIRON["BLOCK_END"]
+      body = ENVIRON["BODY"]; keys = ENVIRON["KEYS"]
+    }
+    # Our own block: regenerate it where it already sits.
+    $0 == s  { emit_block(); found = 1; ours = 1; next }
+    ours     { if ($0 == e) ours = 0; next }
+    # Another path`s block: not ours to touch.
+    /^# >>> vault:/ { other = 1; print; next }
+    other    { if ($0 == e) other = 0; print; next }
+    # Continuation lines of a duplicate we are commenting out.
+    dup      { print "# " $0; if (closes_multiline($0)) dup = 0; next }
+    {
+      if (match($0, /^[ \t]*(export[ \t]+)?[A-Za-z_][A-Za-z0-9_]*=/)) {
+        name = substr($0, RSTART, RLENGTH)
+        sub(/^[ \t]*(export[ \t]+)?/, "", name)
+        sub(/=$/, "", name)
+        if (index(keys, " " name " ") > 0) {
+          print "# [secrets:sync] superseded by the vault block below:"
+          print "# " $0
+          printf "  ! %s commented out (it is now owned by the block)\n", name > "/dev/stderr"
+          if (opens_multiline(substr($0, RSTART + RLENGTH))) dup = 1
+          next
+        }
+      }
+      print
+    }
+    END { if (!found) { print ""; emit_block() } }
   ' "$file" > "$tmp"
-  cat "$tmp" > "$file"   # preserves the target's mode and inode
+  cat "$tmp" > "$file"   # preserves the target`s mode and inode
   rm -f "$tmp"
 }
+
+# The KEY= prefix of a block line, for comparing old against new.
+line_key () { printf '%s' "${1%%=*}"; }
 
 role_id="${VAULT_ROLE_ID:-$(env_get .env VAULT_ROLE_ID)}"
 role_secret="${VAULT_ROLE_SECRET:-$(env_get .env VAULT_ROLE_SECRET)}"
@@ -162,6 +207,7 @@ export BAO_TOKEN="$token" VAULT_TOKEN="$token"
 
 total_changed=0
 FAILED=false
+
 while IFS="$(printf '\t')" read -r path file; do
   [ -n "$path" ] || continue
   if [ -n "$FILTER" ]; then
@@ -182,36 +228,60 @@ $json"
     continue
   fi
 
-  # KV v2 nests the data a level deeper than v1; accept either.
-  pairs="$(printf '%s' "$json" | yq -p json -r '(.data.data // .data) | to_entries[] | .key + " " + (.value | @base64)')"
-  [ -n "$pairs" ] || { echo "  (secret is empty, nothing to merge)"; continue; }
+  # KV v2 nests the data a level deeper than v1; accept either. Sorted so the
+  # block has a stable order and only real changes show up in a diff.
+  pairs="$(printf '%s' "$json" \
+    | yq -p json -r '(.data.data // .data) | to_entries[] | .key + " " + (.value | @base64)' \
+    | sort)"
 
-  changed=0
+  new_body=""
+  keys=""
   while read -r key encoded; do
     [ -n "$key" ] || continue
     case "$key" in
       [A-Za-z_]*) ;;
-      *) echo "  skipped $key (not a valid env var name)"; continue ;;
+      *) warn "  $key is not a valid env var name -- skipped"; continue ;;
     esac
-
     value="$(printf '%s' "$encoded" | base64 -d)"
-    before="$(env_get "$file" "$key")"
-
-    if [ "$before" = "$value" ]; then
-      echo "  = $key (unchanged)"
-      continue
-    fi
-
-    if [ "$DRY_RUN" = true ]; then
-      if [ -n "$before" ]; then echo "  ~ $key would be updated"; else echo "  + $key would be added"; fi
-    else
-      env_set "$file" "$key" "$value"
-      if [ -n "$before" ]; then echo "  ~ $key updated"; else echo "  + $key added"; fi
-    fi
-    changed=$((changed + 1))
+    new_body="${new_body}${key}=$(env_quote "$value")"$'\n'
+    keys="$keys $key"
   done <<EOF
 $pairs
 EOF
+
+  old_body="$(block_get "$file" "$path")"
+
+  # Report against the block as it stands: identical line = unchanged, same
+  # key with a different value = updated, absent from Vault now = removed.
+  changed=0
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    key="$(line_key "$line")"
+    if printf '%s\n' "$old_body" | grep -qxF "$line"; then
+      echo "  = $key (unchanged)"
+    elif printf '%s\n' "$old_body" | grep -q "^$key="; then
+      echo "  ~ $key updated"
+      changed=$((changed + 1))
+    else
+      echo "  + $key added"
+      changed=$((changed + 1))
+    fi
+  done <<EOF
+$new_body
+EOF
+
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    key="$(line_key "$line")"
+    case "$keys " in
+      *" $key "*) ;;
+      *) echo "  - $key removed (gone from Vault)"; changed=$((changed + 1)) ;;
+    esac
+  done <<EOF
+$old_body
+EOF
+
+  [ "$DRY_RUN" = true ] || block_write "$file" "$path" "$new_body" "$keys"
 
   total_changed=$((total_changed + changed))
 done <<EOF
@@ -220,11 +290,11 @@ EOF
 
 echo
 if [ "$DRY_RUN" = true ]; then
-  echo "Dry run: $total_changed value(s) would change. Nothing was written."
+  echo "Dry run: $total_changed change(s) pending. Nothing was written."
 elif [ "$total_changed" -eq 0 ]; then
   echo "Everything already up to date."
 else
-  echo "Done: $total_changed value(s) written."
+  echo "Done: $total_changed change(s) written."
   echo "Restart the affected service so it reads them."
 fi
 
